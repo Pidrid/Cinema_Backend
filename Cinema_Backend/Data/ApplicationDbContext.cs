@@ -1,10 +1,13 @@
 ﻿using Cinema_Backend.Models;
 using Microsoft.EntityFrameworkCore;
 using Cinema_Backend.Models;
+using Microsoft.VisualStudio.Web.CodeGenerators.Mvc.Templates.General;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 
 namespace Cinema_Backend.Data
 {
-    public class ApplicationDbContext : DbContext
+    public class ApplicationDbContext : IdentityDbContext<User>
     {
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
 
@@ -19,6 +22,18 @@ namespace Cinema_Backend.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<ReservationSeat>()
+                .HasOne(rs => rs.Seat)
+                .WithMany(s => s.ReservationSeats)
+                .HasForeignKey(rs => rs.SeatId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ReservationSeat>()
+                .HasOne(rs => rs.Reservation)
+                .WithMany(r => r.ReservationSeats)
+                .HasForeignKey(rs => rs.ReservationId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

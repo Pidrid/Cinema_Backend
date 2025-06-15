@@ -7,10 +7,14 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using Cinema_Backend.Data;
 using Cinema_Backend.Models;
+using Cinema_Backend.DTOs;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Cinema_Backend.Controllers
 {
-    public class SeatsController : Controller
+    [ApiController]
+    [Route("api/[controller]")]
+    public class SeatsController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
 
@@ -19,146 +23,142 @@ namespace Cinema_Backend.Controllers
             _context = context;
         }
 
-        // GET: Seats
-        public async Task<IActionResult> Index()
+        // ------------------------------------
+        // 1) GET: api/seats
+        //    -- dostępne dla zalogowanych użytkowników
+        //    -- opcjonalnie można wymusić parametry: ?roomId=1
+        [HttpGet]
+        [Authorize]
+        public async Task<ActionResult<IEnumerable<SeatDto>>> GetAll(int? roomId = null)
         {
-            var applicationDbContext = _context.Seats.Include(s => s.Room);
-            return View(await applicationDbContext.ToListAsync());
-        }
+            var query = _context.Seats.AsQueryable();
 
-        // GET: Seats/Details/5
-        public async Task<IActionResult> Details(int? id)
-        {
-            if (id == null)
-            {
-                return NotFound();
-            }
+            if (roomId.HasValue)
+                query = query.Where(s => s.RoomId == roomId.Value);
 
-            var seat = await _context.Seats
-                .Include(s => s.Room)
-                .FirstOrDefaultAsync(m => m.SeatId == id);
-            if (seat == null)
-            {
-                return NotFound();
-            }
-
-            return View(seat);
-        }
-
-        // GET: Seats/Create
-        public IActionResult Create()
-        {
-            ViewData["RoomId"] = new SelectList(_context.Rooms, "RoomId", "RoomId");
-            return View();
-        }
-
-        // POST: Seats/Create
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("SeatId,RoomId,Row,Column")] Seat seat)
-        {
-            if (ModelState.IsValid)
-            {
-                _context.Add(seat);
-                await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
-            }
-            ViewData["RoomId"] = new SelectList(_context.Rooms, "RoomId", "RoomId", seat.RoomId);
-            return View(seat);
-        }
-
-        // GET: Seats/Edit/5
-        public async Task<IActionResult> Edit(int? id)
-        {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
-            var seat = await _context.Seats.FindAsync(id);
-            if (seat == null)
-            {
-                return NotFound();
-            }
-            ViewData["RoomId"] = new SelectList(_context.Rooms, "RoomId", "RoomId", seat.RoomId);
-            return View(seat);
-        }
-
-        // POST: Seats/Edit/5
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("SeatId,RoomId,Row,Column")] Seat seat)
-        {
-            if (id != seat.SeatId)
-            {
-                return NotFound();
-            }
-
-            if (ModelState.IsValid)
-            {
-                try
+            var seats = await query
+                .Select(s => new SeatDto
                 {
-                    _context.Update(seat);
-                    await _context.SaveChangesAsync();
-                }
-                catch (DbUpdateConcurrencyException)
-                {
-                    if (!SeatExists(seat.SeatId))
-                    {
-                        return NotFound();
-                    }
-                    else
-                    {
-                        throw;
-                    }
-                }
-                return RedirectToAction(nameof(Index));
-            }
-            ViewData["RoomId"] = new SelectList(_context.Rooms, "RoomId", "RoomId", seat.RoomId);
-            return View(seat);
+                    SeatId = s.SeatId,
+                    RoomId = s.RoomId,
+                    Row = s.Row,
+                    Column = s.Column
+                })
+                .ToListAsync();
+
+            return Ok(seats);
         }
 
-        // GET: Seats/Delete/5
-        public async Task<IActionResult> Delete(int? id)
+        // ------------------------------------
+        // 2) GET: api/seats/{id}
+        //    -- dostępne dla zalogowanych użytkowników
+        [HttpGet("{id:int}")]
+        [Authorize]
+        public async Task<ActionResult<SeatDto>> GetById(int id)
         {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
             var seat = await _context.Seats
-                .Include(s => s.Room)
-                .FirstOrDefaultAsync(m => m.SeatId == id);
-            if (seat == null)
-            {
-                return NotFound();
-            }
+                .Where(s => s.SeatId == id)
+                .Select(s => new SeatDto
+                {
+                    SeatId = s.SeatId,
+                    RoomId = s.RoomId,
+                    Row = s.Row,
+                    Column = s.Column
+                })
+                .FirstOrDefaultAsync();
 
-            return View(seat);
+            if (seat == null)
+                return NotFound();
+
+            return Ok(seat);
         }
 
-        // POST: Seats/Delete/5
-        [HttpPost, ActionName("Delete")]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteConfirmed(int id)
+        // ------------------------------------
+        // 3) POST: api/seats
+        //    -- dostępny tylko dla Admina
+        [HttpPost]
+        [Authorize(Roles = "Admin")]
+        public async Task<ActionResult<SeatDto>> Create([FromBody] SeatCreateDto dto)
         {
-            var seat = await _context.Seats.FindAsync(id);
-            if (seat != null)
-            {
-                _context.Seats.Remove(seat);
-            }
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
+            // Sprawdź, czy sala istnieje
+            var roomExists = await _context.Rooms.AnyAsync(r => r.RoomId == dto.RoomId);
+            if (!roomExists)
+                return BadRequest($"Sala o ID {dto.RoomId} nie istnieje.");
+
+            var seat = new Seat
+            {
+                RoomId = dto.RoomId,
+                Row = dto.Row,
+                Column = dto.Column
+            };
+
+            _context.Seats.Add(seat);
             await _context.SaveChangesAsync();
-            return RedirectToAction(nameof(Index));
+
+            var resultDto = new SeatDto
+            {
+                SeatId = seat.SeatId,
+                RoomId = seat.RoomId,
+                Row = seat.Row,
+                Column = seat.Column
+            };
+
+            return CreatedAtAction(nameof(GetById), new { id = seat.SeatId }, resultDto);
         }
 
-        private bool SeatExists(int id)
+        // ------------------------------------
+        // 4) PUT: api/seats/{id}
+        //    -- dostępny tylko dla Admina
+        [HttpPut("{id:int}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Update(int id, [FromBody] SeatUpdateDto dto)
         {
-            return _context.Seats.Any(e => e.SeatId == id);
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var seatInDb = await _context.Seats.FindAsync(id);
+            if (seatInDb == null)
+                return NotFound();
+
+            // Możesz sprawdzić, czy zmieniana sala istnieje:
+            var roomExists = await _context.Rooms.AnyAsync(r => r.RoomId == dto.RoomId);
+            if (!roomExists)
+                return BadRequest($"Sala o ID {dto.RoomId} nie istnieje.");
+
+            seatInDb.RoomId = dto.RoomId;
+            seatInDb.Row = dto.Row;
+            seatInDb.Column = dto.Column;
+
+            _context.Entry(seatInDb).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        // ------------------------------------
+        // 5) DELETE: api/seats/{id}
+        //    -- dostępny tylko dla Admina
+        [HttpDelete("{id:int}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var seatInDb = await _context.Seats.FindAsync(id);
+            if (seatInDb == null)
+                return NotFound();
+
+            // Sprawdź, czy to miejsce zostało już zarezerwowane w przeszłości
+            var isReserved = await _context.ReservationSeats
+                .AnyAsync(rs => rs.SeatId == id);
+            if (isReserved)
+                return BadRequest("Nie można usunąć miejsca, ponieważ jest/zostało zarezerwowane.");
+
+            _context.Seats.Remove(seatInDb);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
         }
     }
 }

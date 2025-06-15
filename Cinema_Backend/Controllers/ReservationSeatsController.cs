@@ -7,10 +7,15 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using Cinema_Backend.Data;
 using Cinema_Backend.Models;
+using Cinema_Backend.DTOs;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace Cinema_Backend.Controllers
 {
-    public class ReservationSeatsController : Controller
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ReservationSeatsController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
 
@@ -19,152 +24,202 @@ namespace Cinema_Backend.Controllers
             _context = context;
         }
 
-        // GET: ReservationSeats
-        public async Task<IActionResult> Index()
+        // ------------------------------------
+        // 1) GET: api/reservationseats
+        [HttpGet]
+        [Authorize(Roles = "Admin")]
+        public async Task<ActionResult<IEnumerable<ReservationSeatDto>>> GetAll()
         {
-            var applicationDbContext = _context.ReservationSeats.Include(r => r.Reservation).Include(r => r.Seat);
-            return View(await applicationDbContext.ToListAsync());
-        }
-
-        // GET: ReservationSeats/Details/5
-        public async Task<IActionResult> Details(int? id)
-        {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
-            var reservationSeat = await _context.ReservationSeats
-                .Include(r => r.Reservation)
-                .Include(r => r.Seat)
-                .FirstOrDefaultAsync(m => m.ReservationSeatId == id);
-            if (reservationSeat == null)
-            {
-                return NotFound();
-            }
-
-            return View(reservationSeat);
-        }
-
-        // GET: ReservationSeats/Create
-        public IActionResult Create()
-        {
-            ViewData["ReservationId"] = new SelectList(_context.Reservations, "ReservationId", "ReservationId");
-            ViewData["SeatId"] = new SelectList(_context.Seats, "SeatId", "SeatId");
-            return View();
-        }
-
-        // POST: ReservationSeats/Create
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("ReservationSeatId,ReservationId,SeatId")] ReservationSeat reservationSeat)
-        {
-            if (ModelState.IsValid)
-            {
-                _context.Add(reservationSeat);
-                await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
-            }
-            ViewData["ReservationId"] = new SelectList(_context.Reservations, "ReservationId", "ReservationId", reservationSeat.ReservationId);
-            ViewData["SeatId"] = new SelectList(_context.Seats, "SeatId", "SeatId", reservationSeat.SeatId);
-            return View(reservationSeat);
-        }
-
-        // GET: ReservationSeats/Edit/5
-        public async Task<IActionResult> Edit(int? id)
-        {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
-            var reservationSeat = await _context.ReservationSeats.FindAsync(id);
-            if (reservationSeat == null)
-            {
-                return NotFound();
-            }
-            ViewData["ReservationId"] = new SelectList(_context.Reservations, "ReservationId", "ReservationId", reservationSeat.ReservationId);
-            ViewData["SeatId"] = new SelectList(_context.Seats, "SeatId", "SeatId", reservationSeat.SeatId);
-            return View(reservationSeat);
-        }
-
-        // POST: ReservationSeats/Edit/5
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("ReservationSeatId,ReservationId,SeatId")] ReservationSeat reservationSeat)
-        {
-            if (id != reservationSeat.ReservationSeatId)
-            {
-                return NotFound();
-            }
-
-            if (ModelState.IsValid)
-            {
-                try
+            var all = await _context.ReservationSeats
+                .Select(rs => new ReservationSeatDto
                 {
-                    _context.Update(reservationSeat);
-                    await _context.SaveChangesAsync();
-                }
-                catch (DbUpdateConcurrencyException)
+                    ReservationSeatId = rs.ReservationSeatId,
+                    ReservationId = rs.ReservationId,
+                    SeatId = rs.SeatId
+                })
+                .ToListAsync();
+
+            return Ok(all);
+        }
+
+        // ------------------------------------
+        // 2) GET: api/reservationseats/reservation/{reservationId}
+        //      Admin: zwraca dowolne
+        //      Użytkownik: tylko te, które należą do jego rezerwacji
+        [HttpGet("reservation/{reservationId:int}")]
+        [Authorize]
+        public async Task<ActionResult<IEnumerable<ReservationSeatDto>>> GetByReservation(int reservationId)
+        {
+            var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!int.TryParse(userIdString, out var userId))
+                return Forbid();
+
+            // Pobranie rezerwacji z bazy aby sprawdzić właściciela
+            var reservation = await _context.Reservations
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.ReservationId == reservationId);
+
+            if (reservation == null)
+                return NotFound($"Nie znaleziono rezerwacji o ID {reservationId}.");
+
+            if (!User.IsInRole("Admin") && reservation.UserId != userIdString)
+                return Forbid(); // 403
+
+            var list = await _context.ReservationSeats
+                .Where(rs => rs.ReservationId == reservationId)
+                .Select(rs => new ReservationSeatDto
                 {
-                    if (!ReservationSeatExists(reservationSeat.ReservationSeatId))
-                    {
-                        return NotFound();
-                    }
-                    else
-                    {
-                        throw;
-                    }
-                }
-                return RedirectToAction(nameof(Index));
-            }
-            ViewData["ReservationId"] = new SelectList(_context.Reservations, "ReservationId", "ReservationId", reservationSeat.ReservationId);
-            ViewData["SeatId"] = new SelectList(_context.Seats, "SeatId", "SeatId", reservationSeat.SeatId);
-            return View(reservationSeat);
+                    ReservationSeatId = rs.ReservationSeatId,
+                    ReservationId = rs.ReservationId,
+                    SeatId = rs.SeatId
+                })
+                .ToListAsync();
+
+            return Ok(list);
         }
 
-        // GET: ReservationSeats/Delete/5
-        public async Task<IActionResult> Delete(int? id)
+        // ------------------------------------
+        // 3) GET: api/reservationseats/{id}
+        //    jeśli Admin: zwraca dowolne
+        //    jeśli użytkownik: musi być właścicielem powiązanej rezerwacji
+        [HttpGet("{id:int}")]
+        [Authorize]
+        public async Task<ActionResult<ReservationSeatDto>> GetById(int id)
         {
-            if (id == null)
-            {
+            var rs = await _context.ReservationSeats
+                .FirstOrDefaultAsync(x => x.ReservationSeatId == id);
+
+            if (rs == null)
                 return NotFound();
+
+            var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!int.TryParse(userIdString, out var userId))
+                return Forbid();
+
+            if (!User.IsInRole("Admin"))
+            {
+                var reservation = await _context.Reservations
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.ReservationId == rs.ReservationId);
+
+                if (reservation == null || reservation.UserId != userIdString)
+                    return Forbid();
             }
 
-            var reservationSeat = await _context.ReservationSeats
-                .Include(r => r.Reservation)
-                .Include(r => r.Seat)
-                .FirstOrDefaultAsync(m => m.ReservationSeatId == id);
-            if (reservationSeat == null)
+            var dto = new ReservationSeatDto
             {
-                return NotFound();
-            }
+                ReservationSeatId = rs.ReservationSeatId,
+                ReservationId = rs.ReservationId,
+                SeatId = rs.SeatId
+            };
 
-            return View(reservationSeat);
+            return Ok(dto);
         }
 
-        // POST: ReservationSeats/Delete/5
-        [HttpPost, ActionName("Delete")]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteConfirmed(int id)
+        // ------------------------------------
+        // 4) POST: api/reservationseats
+        //    tylko Admin może tworzyć "oddzieln"e wiersze ReservationSeat.
+        [HttpPost]
+        [Authorize(Roles = "Admin")]
+        public async Task<ActionResult<ReservationSeatDto>> Create([FromBody] ReservationSeatCreateDto dto)
         {
-            var reservationSeat = await _context.ReservationSeats.FindAsync(id);
-            if (reservationSeat != null)
-            {
-                _context.ReservationSeats.Remove(reservationSeat);
-            }
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
+            // Sprawdź istnieje rezerwacja
+            var reservationExists = await _context.Reservations
+                .AnyAsync(r => r.ReservationId == dto.ReservationId);
+            if (!reservationExists)
+                return BadRequest($"Rezerwacja o ID {dto.ReservationId} nie istnieje.");
+
+            // Sprawdź istnieje miejsce
+            var seatExists = await _context.Seats
+                .AnyAsync(s => s.SeatId == dto.SeatId);
+            if (!seatExists)
+                return BadRequest($"Miejsce o ID {dto.SeatId} nie istnieje.");
+
+            // Sprawdź, czy dana relacja nie istnieje już (unikalność pola ReservationId+SeatId)
+            var duplicate = await _context.ReservationSeats
+                .AnyAsync(rs => rs.ReservationId == dto.ReservationId && rs.SeatId == dto.SeatId);
+            if (duplicate)
+                return BadRequest("Ta para (ReservationId + SeatId) już istnieje.");
+
+            var rs = new ReservationSeat
+            {
+                ReservationId = dto.ReservationId,
+                SeatId = dto.SeatId
+            };
+
+            _context.ReservationSeats.Add(rs);
             await _context.SaveChangesAsync();
-            return RedirectToAction(nameof(Index));
+
+            var resultDto = new ReservationSeatDto
+            {
+                ReservationSeatId = rs.ReservationSeatId,
+                ReservationId = rs.ReservationId,
+                SeatId = rs.SeatId
+            };
+
+            return CreatedAtAction(nameof(GetById), new { id = rs.ReservationSeatId }, resultDto);
         }
 
-        private bool ReservationSeatExists(int id)
+        // ------------------------------------
+        // 5) PUT: api/reservationseats/{id}
+        //    -- tylko Admin może edytować
+        [HttpPut("{id:int}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Update(int id, [FromBody] ReservationSeatUpdateDto dto)
         {
-            return _context.ReservationSeats.Any(e => e.ReservationSeatId == id);
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var rsInDb = await _context.ReservationSeats.FindAsync(id);
+            if (rsInDb == null)
+                return NotFound();
+
+            // Sprawdź istnienie rezerwacji i miejsca (jak wyżej)
+            var reservationExists = await _context.Reservations
+                .AnyAsync(r => r.ReservationId == dto.ReservationId);
+            if (!reservationExists)
+                return BadRequest($"Rezerwacja o ID {dto.ReservationId} nie istnieje.");
+
+            var seatExists = await _context.Seats
+                .AnyAsync(s => s.SeatId == dto.SeatId);
+            if (!seatExists)
+                return BadRequest($"Miejsce o ID {dto.SeatId} nie istnieje.");
+
+            // Upewnij się, że nie wprowadzasz duplikatu (ReservationId+SeatId)
+            var duplicate = await _context.ReservationSeats
+                .AnyAsync(x => x.ReservationId == dto.ReservationId
+                               && x.SeatId == dto.SeatId
+                               && x.ReservationSeatId != id);
+            if (duplicate)
+                return BadRequest("Ta para (ReservationId + SeatId) już istnieje w innej krotce.");
+
+            // Nadpisujemy:
+            rsInDb.ReservationId = dto.ReservationId;
+            rsInDb.SeatId = dto.SeatId;
+
+            _context.Entry(rsInDb).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        // ------------------------------------
+        // 6) DELETE: api/reservationseats/{id}
+        //    -- tylko Admin może usuwać
+        [HttpDelete("{id:int}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var rsInDb = await _context.ReservationSeats.FindAsync(id);
+            if (rsInDb == null)
+                return NotFound();
+
+            _context.ReservationSeats.Remove(rsInDb);
+            await _context.SaveChangesAsync();
+            return NoContent();
         }
     }
 }

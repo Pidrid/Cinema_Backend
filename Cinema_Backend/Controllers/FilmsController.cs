@@ -7,10 +7,14 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using Cinema_Backend.Data;
 using Cinema_Backend.Models;
+using Microsoft.AspNetCore.Authorization;
+using Cinema_Backend.DTOs;
 
 namespace Cinema_Backend.Controllers
 {
-    public class FilmsController : Controller
+    [ApiController]
+    [Route("api/[controller]")]
+    public class FilmsController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
 
@@ -19,139 +23,111 @@ namespace Cinema_Backend.Controllers
             _context = context;
         }
 
-        // GET: Films
-        public async Task<IActionResult> Index()
+        // 1. GET: api/films
+        //    dostępny publicznie. Zwraca listę FilmDto.
+        [HttpGet]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<FilmDto>>> GetAll()
         {
-            return View(await _context.Films.ToListAsync());
-        }
-
-        // GET: Films/Details/5
-        public async Task<IActionResult> Details(int? id)
-        {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
-            var film = await _context.Films
-                .FirstOrDefaultAsync(m => m.FilmId == id);
-            if (film == null)
-            {
-                return NotFound();
-            }
-
-            return View(film);
-        }
-
-        // GET: Films/Create
-        public IActionResult Create()
-        {
-            return View();
-        }
-
-        // POST: Films/Create
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("FilmId,Name,Description")] Film film)
-        {
-            if (ModelState.IsValid)
-            {
-                _context.Add(film);
-                await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
-            }
-            return View(film);
-        }
-
-        // GET: Films/Edit/5
-        public async Task<IActionResult> Edit(int? id)
-        {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
-            var film = await _context.Films.FindAsync(id);
-            if (film == null)
-            {
-                return NotFound();
-            }
-            return View(film);
-        }
-
-        // POST: Films/Edit/5
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("FilmId,Name,Description")] Film film)
-        {
-            if (id != film.FilmId)
-            {
-                return NotFound();
-            }
-
-            if (ModelState.IsValid)
-            {
-                try
+            var films = await _context.Films
+                .Select(f => new FilmDto
                 {
-                    _context.Update(film);
-                    await _context.SaveChangesAsync();
-                }
-                catch (DbUpdateConcurrencyException)
-                {
-                    if (!FilmExists(film.FilmId))
-                    {
-                        return NotFound();
-                    }
-                    else
-                    {
-                        throw;
-                    }
-                }
-                return RedirectToAction(nameof(Index));
-            }
-            return View(film);
+                    FilmId = f.FilmId,
+                    Name = f.Name,
+                    Description = f.Description
+                })
+                .ToListAsync();
+
+            return Ok(films);
         }
 
-        // GET: Films/Delete/5
-        public async Task<IActionResult> Delete(int? id)
+        // 2. GET: api/films/{id}
+        //    dostępny publicznie. Zwraca szczegóły jednego filmu.
+        [HttpGet("{id:int}")]
+        [AllowAnonymous]
+        public async Task<ActionResult<FilmDto>> GetById(int id)
         {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
             var film = await _context.Films
-                .FirstOrDefaultAsync(m => m.FilmId == id);
-            if (film == null)
-            {
-                return NotFound();
-            }
+                .Where(f => f.FilmId == id)
+                .Select(f => new FilmDto
+                {
+                    FilmId = f.FilmId,
+                    Name = f.Name,
+                    Description = f.Description
+                })
+                .FirstOrDefaultAsync();
 
-            return View(film);
+            if (film == null)
+                return NotFound();
+
+            return Ok(film);
         }
 
-        // POST: Films/Delete/5
-        [HttpPost, ActionName("Delete")]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteConfirmed(int id)
+        // 3. POST: api/films
+        //    dostępny tylko dla roli Admin. Tworzy nowy film.
+        [HttpPost]
+        [Authorize(Roles = "Admin")]
+        public async Task<ActionResult<FilmDto>> Create([FromBody] FilmCreateDto dto)
         {
-            var film = await _context.Films.FindAsync(id);
-            if (film != null)
-            {
-                _context.Films.Remove(film);
-            }
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
+            var film = new Film
+            {
+                Name = dto.Name,
+                Description = dto.Description
+            };
+
+            _context.Films.Add(film);
             await _context.SaveChangesAsync();
-            return RedirectToAction(nameof(Index));
+
+            var resultDto = new FilmDto
+            {
+                FilmId = film.FilmId,
+                Name = film.Name,
+                Description = film.Description
+            };
+
+            return CreatedAtAction(nameof(GetById), new { id = film.FilmId }, resultDto);
         }
 
-        private bool FilmExists(int id)
+        // 4. PUT: api/films/{id}
+        //    dostępny tylko dla roli Admin. Aktualizuje istniejący film.
+        [HttpPut("{id:int}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Update(int id, [FromBody] FilmUpdateDto dto)
         {
-            return _context.Films.Any(e => e.FilmId == id);
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var filmInDb = await _context.Films.FindAsync(id);
+            if (filmInDb == null)
+                return NotFound();
+
+            // Nadpisujemy tylko te pola, które możemy zmienić
+            filmInDb.Name = dto.Name;
+            filmInDb.Description = dto.Description;
+
+            _context.Entry(filmInDb).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
+
+            return NoContent(); // 204
+        }
+
+        // 5. DELETE: api/films/{id}
+        //    dostępny tylko dla roli Admin. Usuwa film.
+        [HttpDelete("{id:int}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var filmInDb = await _context.Films.FindAsync(id);
+            if (filmInDb == null)
+                return NotFound();
+
+            _context.Films.Remove(filmInDb);
+            await _context.SaveChangesAsync();
+
+            return NoContent(); // 204
         }
     }
 }
