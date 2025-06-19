@@ -24,14 +24,13 @@ namespace Cinema_Backend.Controllers
             _context = context;
         }
 
-        // 1) GET: api/reservations
-        //    jeśli Admin: zwraca wszystkie rezerwacje
-        //    jeśli użytkownik: tylko jego rezerwacje
+        //  GET: api/reservations
+        //  If admin: return all reservations
+        //  If user: return only their reservations
         [HttpGet]
         [Authorize]
         public async Task<ActionResult<IEnumerable<ReservationDto>>> GetAll()
         {
-            // Id zalogowanego użytkownika z JWT
             var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!int.TryParse(userIdString, out var userId))
                 return Forbid();
@@ -91,8 +90,8 @@ namespace Cinema_Backend.Controllers
             }
         }
 
-        // 2) GET: api/reservations/{id}
-        //    Admin lub właściciel rezerwacji
+        //  GET: api/reservations/{id}
+        //  Admin or user who made the reservation can access it
         [HttpGet("{id:int}")]
         [Authorize]
         public async Task<ActionResult<ReservationDto>> GetById(int id)
@@ -133,8 +132,7 @@ namespace Cinema_Backend.Controllers
             return Ok(dto);
         }
 
-        // 3) POST: api/reservations
-        //    każdy zalogowany
+        //  POST: api/reservations
         [HttpPost]
         [Authorize]
         public async Task<ActionResult<ReservationDto>> Create([FromBody] ReservationCreateDto dto)
@@ -142,28 +140,27 @@ namespace Cinema_Backend.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            // Pobieranie userId z tokenu
             var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!int.TryParse(userIdString, out var userId))
                 return Forbid();
 
-            // Sprawdzanie istnienie seansu
+            // Taken screening by ID
             var screening = await _context.Screenings
                 .Include(s => s.Room)
                 .FirstOrDefaultAsync(s => s.ScreeningId == dto.ScreeningId);
 
             if (screening == null)
-                return BadRequest($"Seans o ID {dto.ScreeningId} nie istnieje.");
+                return BadRequest($"Screening with ID {dto.ScreeningId} doesn't exist.");
 
-            // Pobranie miejsca w tej sali
+            // Taken seats by IDs
             var seats = await _context.Seats
                 .Where(s => dto.SeatIds.Contains(s.SeatId) && s.RoomId == screening.RoomId)
                 .ToListAsync();
 
             if (seats.Count != dto.SeatIds.Count)
-                return BadRequest("Przynajmniej jedno z wybranych miejsc jest nieprawidłowe lub nie należy do tej sali.");
+                return BadRequest("At least one of these seats doesn't exist or belongs to other room.");
 
-            // Sprawdzanie czy któreś z miejsc nie jest już zarezerwowane na ten seans
+            // Check if any of the selected seats are already booked for this screening
             var alreadyBookedSeats = await _context.ReservationSeats
                 .Include(rs => rs.Reservation)
                 .Where(rs => dto.SeatIds.Contains(rs.SeatId)
@@ -172,15 +169,13 @@ namespace Cinema_Backend.Controllers
                 .ToListAsync();
 
             if (alreadyBookedSeats.Any())
-                return BadRequest($"Miejsca o ID {string.Join(", ", alreadyBookedSeats)} są już zarezerwowane.");
+                return BadRequest($"Seats with ID {string.Join(", ", alreadyBookedSeats)} are already taken.");
 
-            // Obliczenia finansowe
             var subtotal = screening.Price * dto.SeatIds.Count;
             decimal discount = 0;
-            decimal tax = Math.Round(subtotal * 0.08m, 2); // 8%
+            decimal tax = Math.Round(subtotal * 0.08m, 2);
             var total = subtotal - discount + tax;
 
-            // 4) Utwórz rezerwację
             var reservation = new Reservation
             {
                 ScreeningId = dto.ScreeningId,
@@ -219,7 +214,7 @@ namespace Cinema_Backend.Controllers
             return CreatedAtAction(nameof(GetById), new { id = reservation.ReservationId }, resultDto);
         }
 
-        // 4) DELETE: api/reservations/{id}
+        //  DELETE: api/reservations/{id}
         [HttpDelete("{id:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Delete(int id)

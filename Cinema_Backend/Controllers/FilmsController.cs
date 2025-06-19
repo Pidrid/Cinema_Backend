@@ -23,8 +23,7 @@ namespace Cinema_Backend.Controllers
             _context = context;
         }
 
-        // 1. GET: api/films
-        //    dostępny publicznie. Zwraca listę FilmDto.
+        //  GET: api/films
         [HttpGet]
         [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<FilmDto>>> GetAll()
@@ -41,8 +40,7 @@ namespace Cinema_Backend.Controllers
             return Ok(films);
         }
 
-        // 2. GET: api/films/{id}
-        //    dostępny publicznie. Zwraca szczegóły jednego filmu.
+        //  GET: api/films/{id}
         [HttpGet("{id:int}")]
         [AllowAnonymous]
         public async Task<ActionResult<FilmDto>> GetById(int id)
@@ -63,8 +61,7 @@ namespace Cinema_Backend.Controllers
             return Ok(film);
         }
 
-        // 3. POST: api/films
-        //    dostępny tylko dla roli Admin. Tworzy nowy film.
+        //  POST: api/films
         [HttpPost]
         [Authorize(Roles = "Admin")]
         public async Task<ActionResult<FilmDto>> Create([FromBody] FilmCreateDto dto)
@@ -91,8 +88,7 @@ namespace Cinema_Backend.Controllers
             return CreatedAtAction(nameof(GetById), new { id = film.FilmId }, resultDto);
         }
 
-        // 4. PUT: api/films/{id}
-        //    dostępny tylko dla roli Admin. Aktualizuje istniejący film.
+        //  PUT: api/films/{id}
         [HttpPut("{id:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Update(int id, [FromBody] FilmUpdateDto dto)
@@ -104,18 +100,16 @@ namespace Cinema_Backend.Controllers
             if (filmInDb == null)
                 return NotFound();
 
-            // Nadpisujemy tylko te pola, które możemy zmienić
             filmInDb.Name = dto.Name;
             filmInDb.Description = dto.Description;
 
             _context.Entry(filmInDb).State = EntityState.Modified;
             await _context.SaveChangesAsync();
 
-            return NoContent(); // 204
+            return NoContent(); // Error 204
         }
 
-        // 5. DELETE: api/films/{id}
-        //    dostępny tylko dla roli Admin. Usuwa film.
+        //  DELETE: api/films/{id}
         [HttpDelete("{id:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Delete(int id)
@@ -127,7 +121,7 @@ namespace Cinema_Backend.Controllers
             _context.Films.Remove(filmInDb);
             await _context.SaveChangesAsync();
 
-            return NoContent(); // 204
+            return NoContent(); // Error 204
         }
     }
 }

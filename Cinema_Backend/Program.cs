@@ -3,8 +3,6 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Cinema_Backend.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,8 +18,8 @@ builder.Services
         options.Password.RequireNonAlphanumeric = false;
         options.User.RequireUniqueEmail = true;
     })
-    .AddEntityFrameworkStores<ApplicationDbContext>()   // magazyn danych do Identity
-    .AddDefaultTokenProviders();                        // umo¿liwia generowanie tokenów (np. reset has³a)
+    .AddEntityFrameworkStores<ApplicationDbContext>()   
+    .AddDefaultTokenProviders();                        
 
 builder.Services.AddAuthentication(options => {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -43,7 +41,6 @@ builder.Services.AddAuthentication(options => {
 builder.Services.AddAuthorization();
 
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle  
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -57,7 +54,7 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "Bearer",
         BearerFormat = "JWT",
         In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Description = "Wpisz 'Bearer {token}'"
+        Description = "Enter 'Bearer {token}'"
     });
 
     c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
@@ -76,7 +73,21 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// Allow CORS for Vue.js app
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowVueApp", policy =>
+    {
+        policy.WithOrigins("http://localhost:8080")
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
+    });
+});
+
 var app = builder.Build();
+
+app.UseCors("AllowVueApp");
 
 // Configure the HTTP request pipeline.  
 if (app.Environment.IsDevelopment())
@@ -96,7 +107,7 @@ if (app.Environment.IsDevelopment())
 //    if (!await roleMgr.RoleExistsAsync(adminRole))
 //        await roleMgr.CreateAsync(new IdentityRole(adminRole));
 
-//    const string adminEmail = "272659@student.pwr.edu.pl";
+//    const string adminEmail = "email@email.com";
 //    const string adminPass = "P@ssw0rd";
 //    var admin = await userMgr.FindByEmailAsync(adminEmail);
 //    if (admin == null)

@@ -23,11 +23,9 @@ namespace Cinema_Backend.Controllers
             _context = context;
         }
 
-        // ------------------------------------
-        // 1) GET: api/rooms
-        //    -- dostępne dla zalogowanych użytkowników
+        //  GET: api/rooms
         [HttpGet]
-        [Authorize]
+        [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<RoomDto>>> GetAll()
         {
             var rooms = await _context.Rooms
@@ -41,11 +39,9 @@ namespace Cinema_Backend.Controllers
             return Ok(rooms);
         }
 
-        // ------------------------------------
-        // 2) GET: api/rooms/{id}
-        //    -- dostępne dla zalogowanych użytkowników
+        // GET: api/rooms/{id}
         [HttpGet("{id:int}")]
-        [Authorize]
+        [AllowAnonymous]
         public async Task<ActionResult<RoomDto>> GetById(int id)
         {
             var room = await _context.Rooms
@@ -63,9 +59,7 @@ namespace Cinema_Backend.Controllers
             return Ok(room);
         }
 
-        // ------------------------------------
-        // 3) POST: api/rooms
-        //    -- dostępny tylko dla Admina
+        //  POST: api/rooms
         [HttpPost]
         [Authorize(Roles = "Admin")]
         public async Task<ActionResult<RoomDto>> Create([FromBody] RoomCreateDto dto)
@@ -90,9 +84,7 @@ namespace Cinema_Backend.Controllers
             return CreatedAtAction(nameof(GetById), new { id = room.RoomId }, resultDto);
         }
 
-        // ------------------------------------
-        // 4) PUT: api/rooms/{id}
-        //    -- dostępny tylko dla Admina
+        //  PUT: api/rooms/{id}
         [HttpPut("{id:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Update(int id, [FromBody] RoomUpdateDto dto)
@@ -111,9 +103,7 @@ namespace Cinema_Backend.Controllers
             return NoContent();
         }
 
-        // ------------------------------------
-        // 5) DELETE: api/rooms/{id}
-        //    -- dostępny tylko dla Admina
+        //  DELETE: api/rooms/{id}
         [HttpDelete("{id:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Delete(int id)
@@ -122,12 +112,10 @@ namespace Cinema_Backend.Controllers
             if (roomInDb == null)
                 return NotFound();
 
-            // Jeśli w sali są miejsca lub seansy → możesz tu dodać logikę cascade, 
-            // ale dla uproszczenia: usuwamy tylko, gdy sala jest pusta
             var hasSeats = await _context.Seats.AnyAsync(s => s.RoomId == id);
             var hasScreenings = await _context.Screenings.AnyAsync(s => s.RoomId == id);
             if (hasSeats || hasScreenings)
-                return BadRequest("Nie można usunąć sali, bo są przypisane miejsca lub seanse.");
+                return BadRequest("You can't delete room with associated seats or screenings.");
 
             _context.Rooms.Remove(roomInDb);
             await _context.SaveChangesAsync();

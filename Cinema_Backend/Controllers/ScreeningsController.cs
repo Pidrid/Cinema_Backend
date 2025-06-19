@@ -23,11 +23,9 @@ namespace Cinema_Backend.Controllers
             _context = context;
         }
 
-        // ------------------------------------
-        // 1) GET: api/screenings
-        //    -- dostępne dla zalogowanych użytkowników
+        //  GET: api/screenings
         [HttpGet]
-        [Authorize]
+        [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<ScreeningDto>>> GetAll()
         {
             var screenings = await _context.Screenings
@@ -50,11 +48,9 @@ namespace Cinema_Backend.Controllers
             return Ok(screenings);
         }
 
-        // ------------------------------------
-        // 2) GET: api/screenings/{id}
-        //    -- dostępne dla zalogowanych użytkowników
+        //  GET: api/screenings/{id}
         [HttpGet("{id:int}")]
-        [Authorize]
+        [AllowAnonymous]
         public async Task<ActionResult<ScreeningDto>> GetById(int id)
         {
             var screening = await _context.Screenings
@@ -81,9 +77,7 @@ namespace Cinema_Backend.Controllers
             return Ok(screening);
         }
 
-        // ------------------------------------
-        // 3) POST: api/screenings
-        //    -- dostępny tylko dla Admina
+        //  POST: api/screenings
         [HttpPost]
         [Authorize(Roles = "Admin")]
         public async Task<ActionResult<ScreeningDto>> Create([FromBody] ScreeningCreateDto dto)
@@ -91,13 +85,12 @@ namespace Cinema_Backend.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            // Sprawdź, czy film i sala istnieją
             var filmExists = await _context.Films.AnyAsync(f => f.FilmId == dto.FilmId);
             var roomExists = await _context.Rooms.AnyAsync(r => r.RoomId == dto.RoomId);
             if (!filmExists)
-                return BadRequest($"Film o ID {dto.FilmId} nie istnieje.");
+                return BadRequest($"Film with ID {dto.FilmId} doesn't exist.");
             if (!roomExists)
-                return BadRequest($"Sala o ID {dto.RoomId} nie istnieje.");
+                return BadRequest($"Room with ID {dto.RoomId} doesn't exist.");
 
             var screening = new Screening
             {
@@ -112,7 +105,7 @@ namespace Cinema_Backend.Controllers
             _context.Screenings.Add(screening);
             await _context.SaveChangesAsync();
 
-            // Ponownie pobieramy nazwę filmu i sali dla DTO
+            // Load the created screening with related entities
             var created = await _context.Screenings
                 .Include(s => s.Film)
                 .Include(s => s.Room)
@@ -134,9 +127,7 @@ namespace Cinema_Backend.Controllers
             return CreatedAtAction(nameof(GetById), new { id = created.ScreeningId }, created);
         }
 
-        // ------------------------------------
-        // 4) PUT: api/screenings/{id}
-        //    -- dostępny tylko dla Admina
+        //  PUT: api/screenings/{id}
         [HttpPut("{id:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Update(int id, [FromBody] ScreeningUpdateDto dto)
@@ -148,13 +139,12 @@ namespace Cinema_Backend.Controllers
             if (screeningInDb == null)
                 return NotFound();
 
-            // Sprawdź, czy film i sala istnieją
             var filmExists = await _context.Films.AnyAsync(f => f.FilmId == dto.FilmId);
             var roomExists = await _context.Rooms.AnyAsync(r => r.RoomId == dto.RoomId);
             if (!filmExists)
-                return BadRequest($"Film o ID {dto.FilmId} nie istnieje.");
+                return BadRequest($"Film with ID {dto.FilmId} doesn't exist.");
             if (!roomExists)
-                return BadRequest($"Sala o ID {dto.RoomId} nie istnieje.");
+                return BadRequest($"Room with ID {dto.RoomId} doesn't exist.");
 
             screeningInDb.FilmId = dto.FilmId;
             screeningInDb.RoomId = dto.RoomId;
@@ -169,9 +159,7 @@ namespace Cinema_Backend.Controllers
             return NoContent();
         }
 
-        // ------------------------------------
-        // 5) DELETE: api/screenings/{id}
-        //    -- dostępny tylko dla Admina
+        //  DELETE: api/screenings/{id}
         [HttpDelete("{id:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Delete(int id)
@@ -180,11 +168,10 @@ namespace Cinema_Backend.Controllers
             if (screeningInDb == null)
                 return NotFound();
 
-            // Sprawdź, czy nie ma rezerwacji do tego seansu
             var hasReservations = await _context.Reservations
                 .AnyAsync(r => r.ScreeningId == id);
             if (hasReservations)
-                return BadRequest("Nie można usunąć seansu, ponieważ są powiązane rezerwacje.");
+                return BadRequest("You can't delete screening with associated reservations");
 
             _context.Screenings.Remove(screeningInDb);
             await _context.SaveChangesAsync();

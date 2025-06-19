@@ -23,6 +23,7 @@ namespace Cinema_Backend.Data
         {
             base.OnModelCreating(modelBuilder);
 
+            // Cyclic dependencies between entities 
             modelBuilder.Entity<ReservationSeat>()
                 .HasOne(rs => rs.Seat)
                 .WithMany(s => s.ReservationSeats)

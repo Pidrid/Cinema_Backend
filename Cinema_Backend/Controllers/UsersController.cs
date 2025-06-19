@@ -25,8 +25,7 @@ namespace Cinema_Backend.Controllers
             _userManager = userManager;
         }
 
-        // GET: api/users
-        // Tylko Admin może pobierać listę wszystkich użytkowników
+        //  GET: api/users
         [HttpGet]
         [Authorize(Roles = "Admin")]
         public ActionResult<IEnumerable<UserDto>> GetAll()
@@ -45,17 +44,16 @@ namespace Cinema_Backend.Controllers
         }
 
         // GET: api/users/{id}
-        // Admin lub sam użytkownik (sprawdzamy, czy currentUserId == requestedId)
+        // If admin: get any user
+        // If logged in user: get their own profile
         [HttpGet("{id:int}")]
         [Authorize]
         public async Task<ActionResult<UserDto>> GetById(int id)
         {
-            // Pobieramy aktualne Id zalogowanego użytkownika z tokenu:
             var currentUserIdString = User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier);
             if (!int.TryParse(currentUserIdString, out var currentUserId))
-                return Forbid(); // coś jest nie tak z tokenem
+                return Forbid(); 
 
-            // Tylko Admin albo on sam może zobaczyć ten zasób
             if (!User.IsInRole("Admin") && currentUserId != id)
                 return Forbid();
 
@@ -74,8 +72,7 @@ namespace Cinema_Backend.Controllers
             return Ok(dto);
         }
 
-        // DELETE: api/users/{id}
-        // Tylko Admin może usunąć użytkownika
+        //  DELETE: api/users/{id}
         [HttpDelete("{id:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Delete(int id)
@@ -91,7 +88,7 @@ namespace Cinema_Backend.Controllers
             return NoContent();
         }
 
-        // PUT: api/users/profile
+        //  PUT: api/users/profile
         [HttpPut("profile")]
         [Authorize]
         public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileDto dto)
@@ -110,7 +107,7 @@ namespace Cinema_Backend.Controllers
             return NoContent();
         }
 
-        // PUT: api/users/password
+        //  PUT: api/users/password
         [HttpPut("password")]
         [Authorize]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)

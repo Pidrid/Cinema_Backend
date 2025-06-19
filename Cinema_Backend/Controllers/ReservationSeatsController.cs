@@ -24,8 +24,7 @@ namespace Cinema_Backend.Controllers
             _context = context;
         }
 
-        // ------------------------------------
-        // 1) GET: api/reservationseats
+        //  GET: api/reservationseats
         [HttpGet]
         [Authorize(Roles = "Admin")]
         public async Task<ActionResult<IEnumerable<ReservationSeatDto>>> GetAll()
@@ -42,10 +41,9 @@ namespace Cinema_Backend.Controllers
             return Ok(all);
         }
 
-        // ------------------------------------
-        // 2) GET: api/reservationseats/reservation/{reservationId}
-        //      Admin: zwraca dowolne
-        //      Użytkownik: tylko te, które należą do jego rezerwacji
+        //  GET: api/reservationseats/reservation/{reservationId}
+        //  If Admin: return all seats for the reservation
+        //  If user: return only if they own the reservation
         [HttpGet("reservation/{reservationId:int}")]
         [Authorize]
         public async Task<ActionResult<IEnumerable<ReservationSeatDto>>> GetByReservation(int reservationId)
@@ -54,7 +52,6 @@ namespace Cinema_Backend.Controllers
             if (!int.TryParse(userIdString, out var userId))
                 return Forbid();
 
-            // Pobranie rezerwacji z bazy aby sprawdzić właściciela
             var reservation = await _context.Reservations
                 .AsNoTracking()
                 .FirstOrDefaultAsync(r => r.ReservationId == reservationId);
@@ -79,9 +76,9 @@ namespace Cinema_Backend.Controllers
         }
 
         // ------------------------------------
-        // 3) GET: api/reservationseats/{id}
-        //    jeśli Admin: zwraca dowolne
-        //    jeśli użytkownik: musi być właścicielem powiązanej rezerwacji
+        //  GET: api/reservationseats/{id}
+        //  If Admin: return ReservationSeat by ID
+        //  If user: return only if they own the reservation
         [HttpGet("{id:int}")]
         [Authorize]
         public async Task<ActionResult<ReservationSeatDto>> GetById(int id)
@@ -116,9 +113,7 @@ namespace Cinema_Backend.Controllers
             return Ok(dto);
         }
 
-        // ------------------------------------
-        // 4) POST: api/reservationseats
-        //    tylko Admin może tworzyć "oddzieln"e wiersze ReservationSeat.
+        //  POST: api/reservationseats
         [HttpPost]
         [Authorize(Roles = "Admin")]
         public async Task<ActionResult<ReservationSeatDto>> Create([FromBody] ReservationSeatCreateDto dto)
@@ -126,23 +121,21 @@ namespace Cinema_Backend.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            // Sprawdź istnieje rezerwacja
             var reservationExists = await _context.Reservations
                 .AnyAsync(r => r.ReservationId == dto.ReservationId);
             if (!reservationExists)
-                return BadRequest($"Rezerwacja o ID {dto.ReservationId} nie istnieje.");
+                return BadRequest($"Reservation with ID {dto.ReservationId} doesn't exist.");
 
-            // Sprawdź istnieje miejsce
             var seatExists = await _context.Seats
                 .AnyAsync(s => s.SeatId == dto.SeatId);
             if (!seatExists)
-                return BadRequest($"Miejsce o ID {dto.SeatId} nie istnieje.");
+                return BadRequest($"Seat with ID {dto.SeatId} doesn't exist.");
 
-            // Sprawdź, czy dana relacja nie istnieje już (unikalność pola ReservationId+SeatId)
+            // Check if the pair ReservationId + SeatId already exists
             var duplicate = await _context.ReservationSeats
                 .AnyAsync(rs => rs.ReservationId == dto.ReservationId && rs.SeatId == dto.SeatId);
             if (duplicate)
-                return BadRequest("Ta para (ReservationId + SeatId) już istnieje.");
+                return BadRequest("Pair ReservationId + SeatId already exists.");
 
             var rs = new ReservationSeat
             {
@@ -163,9 +156,7 @@ namespace Cinema_Backend.Controllers
             return CreatedAtAction(nameof(GetById), new { id = rs.ReservationSeatId }, resultDto);
         }
 
-        // ------------------------------------
-        // 5) PUT: api/reservationseats/{id}
-        //    -- tylko Admin może edytować
+        //  PUT: api/reservationseats/{id}
         [HttpPut("{id:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Update(int id, [FromBody] ReservationSeatUpdateDto dto)
@@ -177,26 +168,23 @@ namespace Cinema_Backend.Controllers
             if (rsInDb == null)
                 return NotFound();
 
-            // Sprawdź istnienie rezerwacji i miejsca (jak wyżej)
             var reservationExists = await _context.Reservations
                 .AnyAsync(r => r.ReservationId == dto.ReservationId);
             if (!reservationExists)
-                return BadRequest($"Rezerwacja o ID {dto.ReservationId} nie istnieje.");
+                return BadRequest($"Reservation with ID {dto.ReservationId} doesn't exist.");
 
             var seatExists = await _context.Seats
                 .AnyAsync(s => s.SeatId == dto.SeatId);
             if (!seatExists)
-                return BadRequest($"Miejsce o ID {dto.SeatId} nie istnieje.");
+                return BadRequest($"Seat with ID {dto.SeatId} doesn't exist.");
 
-            // Upewnij się, że nie wprowadzasz duplikatu (ReservationId+SeatId)
             var duplicate = await _context.ReservationSeats
                 .AnyAsync(x => x.ReservationId == dto.ReservationId
                                && x.SeatId == dto.SeatId
                                && x.ReservationSeatId != id);
             if (duplicate)
-                return BadRequest("Ta para (ReservationId + SeatId) już istnieje w innej krotce.");
+                return BadRequest("Pair ReservationId + SeatId already exists");
 
-            // Nadpisujemy:
             rsInDb.ReservationId = dto.ReservationId;
             rsInDb.SeatId = dto.SeatId;
 
@@ -206,9 +194,7 @@ namespace Cinema_Backend.Controllers
             return NoContent();
         }
 
-        // ------------------------------------
-        // 6) DELETE: api/reservationseats/{id}
-        //    -- tylko Admin może usuwać
+        //  DELETE: api/reservationseats/{id}
         [HttpDelete("{id:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Delete(int id)

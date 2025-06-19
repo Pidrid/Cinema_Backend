@@ -27,9 +27,7 @@ namespace Cinema_Backend.Controllers
             _configuration = configuration;
         }
 
-        /// <summary>
-        /// Rejestracja nowego użytkownika. Nadaje rolę "User".
-        /// </summary>
+
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterDto dto)
         {
@@ -48,15 +46,12 @@ namespace Cinema_Backend.Controllers
             if (!result.Succeeded)
                 return BadRequest(result.Errors);
 
-            // Przydziel rolę "User"
             await _userManager.AddToRoleAsync(user, "User");
 
             return Ok(new { Message = "Registration successful." });
         }
 
-        /// <summary>
-        /// Logowanie. Zwraca JWT z claimami UserId oraz rolami.
-        /// </summary>
+
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
@@ -71,10 +66,8 @@ namespace Cinema_Backend.Controllers
             if (!check.Succeeded)
                 return Unauthorized("Invalid credentials");
 
-            // Pobierz role użytkownika
             var roles = await _userManager.GetRolesAsync(user);
 
-            // Przygotuj claimy do tokena
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
@@ -82,7 +75,6 @@ namespace Cinema_Backend.Controllers
             };
             claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
-            // Generuj token
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 

@@ -23,12 +23,9 @@ namespace Cinema_Backend.Controllers
             _context = context;
         }
 
-        // ------------------------------------
-        // 1) GET: api/seats
-        //    -- dostępne dla zalogowanych użytkowników
-        //    -- opcjonalnie można wymusić parametry: ?roomId=1
+        //  GET: api/seats
         [HttpGet]
-        [Authorize]
+        [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<SeatDto>>> GetAll(int? roomId = null)
         {
             var query = _context.Seats.AsQueryable();
@@ -49,11 +46,70 @@ namespace Cinema_Backend.Controllers
             return Ok(seats);
         }
 
-        // ------------------------------------
-        // 2) GET: api/seats/{id}
-        //    -- dostępne dla zalogowanych użytkowników
+        // GET: api/seats/occupied?screeningId=1
+        [HttpGet("occupied")]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<SeatDto>>> GetOccupiedSeats(int screeningId)
+        {
+            var screeningExists = await _context.Screenings.AnyAsync(s => s.ScreeningId == screeningId);
+            if (!screeningExists)
+                return NotFound($"Screening with ID {screeningId} doesn't exist.");
+
+            var occupiedSeatIds = await _context.ReservationSeats
+                .Where(rs => rs.Reservation.ScreeningId == screeningId)
+                .Select(rs => rs.SeatId)
+                .Distinct()
+                .ToListAsync();
+
+            var occupiedSeats = await _context.Seats
+                .Where(s => occupiedSeatIds.Contains(s.SeatId))
+                .Select(s => new SeatDto
+                {
+                    SeatId = s.SeatId,
+                    RoomId = s.RoomId,
+                    Row = s.Row,
+                    Column = s.Column
+                })
+                .ToListAsync();
+
+            return Ok(occupiedSeats);
+        }
+
+        // GET: api/seats/available?screeningId=1
+        [HttpGet("available")]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<SeatDto>>> GetAvailableSeats(int screeningId)
+        {
+            var screening = await _context.Screenings
+                .Include(s => s.Room)
+                .FirstOrDefaultAsync(s => s.ScreeningId == screeningId);
+
+            if (screening == null)
+                return NotFound($"Screening with ID {screeningId} doesn't exist.");
+
+            var occupiedSeatIds = await _context.ReservationSeats
+                .Where(rs => rs.Reservation.ScreeningId == screeningId)
+                .Select(rs => rs.SeatId)
+                .Distinct()
+                .ToListAsync();
+
+            var availableSeats = await _context.Seats
+                .Where(s => s.RoomId == screening.RoomId && !occupiedSeatIds.Contains(s.SeatId))
+                .Select(s => new SeatDto
+                {
+                    SeatId = s.SeatId,
+                    RoomId = s.RoomId,
+                    Row = s.Row,
+                    Column = s.Column
+                })
+                .ToListAsync();
+
+            return Ok(availableSeats);
+        }
+
+        //  GET: api/seats/{id}
         [HttpGet("{id:int}")]
-        [Authorize]
+        [AllowAnonymous]
         public async Task<ActionResult<SeatDto>> GetById(int id)
         {
             var seat = await _context.Seats
@@ -73,9 +129,7 @@ namespace Cinema_Backend.Controllers
             return Ok(seat);
         }
 
-        // ------------------------------------
-        // 3) POST: api/seats
-        //    -- dostępny tylko dla Admina
+        //  POST: api/seats
         [HttpPost]
         [Authorize(Roles = "Admin")]
         public async Task<ActionResult<SeatDto>> Create([FromBody] SeatCreateDto dto)
@@ -83,10 +137,9 @@ namespace Cinema_Backend.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            // Sprawdź, czy sala istnieje
             var roomExists = await _context.Rooms.AnyAsync(r => r.RoomId == dto.RoomId);
             if (!roomExists)
-                return BadRequest($"Sala o ID {dto.RoomId} nie istnieje.");
+                return BadRequest($"Room with ID {dto.RoomId} doesn't exist.");
 
             var seat = new Seat
             {
@@ -109,9 +162,7 @@ namespace Cinema_Backend.Controllers
             return CreatedAtAction(nameof(GetById), new { id = seat.SeatId }, resultDto);
         }
 
-        // ------------------------------------
-        // 4) PUT: api/seats/{id}
-        //    -- dostępny tylko dla Admina
+        //  PUT: api/seats/{id}
         [HttpPut("{id:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Update(int id, [FromBody] SeatUpdateDto dto)
@@ -123,10 +174,9 @@ namespace Cinema_Backend.Controllers
             if (seatInDb == null)
                 return NotFound();
 
-            // Możesz sprawdzić, czy zmieniana sala istnieje:
             var roomExists = await _context.Rooms.AnyAsync(r => r.RoomId == dto.RoomId);
             if (!roomExists)
-                return BadRequest($"Sala o ID {dto.RoomId} nie istnieje.");
+                return BadRequest($"Room with ID {dto.RoomId} doesn't exist.");
 
             seatInDb.RoomId = dto.RoomId;
             seatInDb.Row = dto.Row;
@@ -138,9 +188,7 @@ namespace Cinema_Backend.Controllers
             return NoContent();
         }
 
-        // ------------------------------------
-        // 5) DELETE: api/seats/{id}
-        //    -- dostępny tylko dla Admina
+        //  DELETE: api/seats/{id}
         [HttpDelete("{id:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Delete(int id)
@@ -149,16 +197,16 @@ namespace Cinema_Backend.Controllers
             if (seatInDb == null)
                 return NotFound();
 
-            // Sprawdź, czy to miejsce zostało już zarezerwowane w przeszłości
             var isReserved = await _context.ReservationSeats
                 .AnyAsync(rs => rs.SeatId == id);
             if (isReserved)
-                return BadRequest("Nie można usunąć miejsca, ponieważ jest/zostało zarezerwowane.");
+                return BadRequest("You can't delete this seat because it has been reserved.");
 
             _context.Seats.Remove(seatInDb);
             await _context.SaveChangesAsync();
 
             return NoContent();
         }
+       
     }
 }
