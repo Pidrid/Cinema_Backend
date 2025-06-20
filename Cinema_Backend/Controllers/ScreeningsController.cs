@@ -77,6 +77,34 @@ namespace Cinema_Backend.Controllers
             return Ok(screening);
         }
 
+        // GET: api/screenings/byday?date=2025-06-20
+        [HttpGet("byday")]
+        [AllowAnonymous]
+        public async Task<ActionResult<IEnumerable<ScreeningDto>>> GetScreeningsByDay(DateTime date)
+        {
+            var nextDay = date.Date.AddDays(1);
+
+            var screenings = await _context.Screenings
+                .Include(s => s.Film)
+                .Include(s => s.Room)
+                .Where(s => s.DateTime >= date.Date && s.DateTime < nextDay)
+                .Select(s => new ScreeningDto
+                {
+                    ScreeningId = s.ScreeningId,
+                    FilmId = s.FilmId,
+                    FilmName = s.Film.Name,
+                    RoomId = s.RoomId,
+                    RoomName = s.Room.Name,
+                    DateTime = s.DateTime,
+                    Price = s.Price,
+                    Language = s.Language,
+                    Subtitles = s.Subtitles
+                })
+                .ToListAsync();
+
+            return Ok(screenings);
+        }
+
         //  POST: api/screenings
         [HttpPost]
         [Authorize(Roles = "Admin")]

@@ -141,8 +141,6 @@ namespace Cinema_Backend.Controllers
                 return BadRequest(ModelState);
 
             var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!int.TryParse(userIdString, out var userId))
-                return Forbid();
 
             // Taken screening by ID
             var screening = await _context.Screenings
@@ -174,7 +172,7 @@ namespace Cinema_Backend.Controllers
             var subtotal = screening.Price * dto.SeatIds.Count;
             decimal discount = 0;
             decimal tax = Math.Round(subtotal * 0.08m, 2);
-            var total = subtotal - discount + tax;
+            var total = subtotal - discount;
 
             var reservation = new Reservation
             {
