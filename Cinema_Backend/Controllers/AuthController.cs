@@ -89,7 +89,15 @@ namespace Cinema_Backend.Controllers
             return Ok(new
             {
                 token = new JwtSecurityTokenHandler().WriteToken(token),
-                expires = token.ValidTo
+                expires = token.ValidTo,
+                user = new
+                {
+                    id = user.Id,
+                    email = user.Email,
+                    firstName = user.FirstName,
+                    lastName = user.LastName,
+                    role = roles.FirstOrDefault()
+                }
             });
         }
     }
