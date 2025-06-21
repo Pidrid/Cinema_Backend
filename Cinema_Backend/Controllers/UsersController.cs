@@ -46,15 +46,13 @@ namespace Cinema_Backend.Controllers
         // GET: api/users/{id}
         // If admin: get any user
         // If logged in user: get their own profile
-        [HttpGet("{id:int}")]
+        [HttpGet("{id}")]
         [Authorize]
-        public async Task<ActionResult<UserDto>> GetById(int id)
+        public async Task<ActionResult<UserDto>> GetById(string id)
         {
             var currentUserIdString = User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier);
-            if (!int.TryParse(currentUserIdString, out var currentUserId))
-                return Forbid(); 
 
-            if (!User.IsInRole("Admin") && currentUserId != id)
+            if (!User.IsInRole("Admin") && currentUserIdString != id)
                 return Forbid();
 
             var user = await _userManager.FindByIdAsync(id.ToString());
@@ -73,9 +71,9 @@ namespace Cinema_Backend.Controllers
         }
 
         //  DELETE: api/users/{id}
-        [HttpDelete("{id:int}")]
+        [HttpDelete("{id}")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> Delete(int id)
+        public async Task<IActionResult> Delete(string id)
         {
             var user = await _userManager.FindByIdAsync(id.ToString());
             if (user == null)

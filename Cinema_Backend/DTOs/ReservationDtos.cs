@@ -4,6 +4,7 @@
     {
         public int ReservationId { get; set; }
         public int ScreeningId { get; set; }
+        public string UserId { get; set; } 
         public DateTime DateTime { get; set; }      // kiedy utworzono rezerwację
         public decimal Subtotal { get; set; }
         public decimal Discount { get; set; }
@@ -24,6 +25,7 @@
     {
         public int ReservationId { get; set; }
         public int ScreeningId { get; set; }
+        public string UserId { get; set; }
         public string FilmName { get; set; }
         public string RoomName { get; set; }
         public DateTime ScreeningDateTime { get; set; }

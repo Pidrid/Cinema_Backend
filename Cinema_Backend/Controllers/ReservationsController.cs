@@ -29,22 +29,30 @@ namespace Cinema_Backend.Controllers
         //  If user: return only their reservations
         [HttpGet]
         [Authorize]
-        public async Task<ActionResult<IEnumerable<ReservationDto>>> GetAll()
+        public async Task<ActionResult<IEnumerable<object>>> GetAll()
         {
             var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!int.TryParse(userIdString, out var userId))
-                return Forbid();
 
             if (User.IsInRole("Admin"))
             {
                 var allReservations = await _context.Reservations
                     .Include(r => r.ReservationSeats)
                         .ThenInclude(rs => rs.Seat)
-                    .Select(r => new ReservationDto
+                    .Include(r => r.User)        
+                    .Include(r => r.Screening)
+                        .ThenInclude(s => s.Film)
+                    .Include(r => r.Screening)
+                        .ThenInclude(s => s.Room)
+                    .Select(r => new ReservationAdminDto
                     {
                         ReservationId = r.ReservationId,
                         ScreeningId = r.ScreeningId,
-                        DateTime = r.DateTime,
+                        UserId = r.UserId,
+                        FilmName = r.Screening.Film.Name,
+                        RoomName = r.Screening.Room.Name,
+                        ScreeningDateTime = r.Screening.DateTime,
+                        UserEmail = r.User.Email,
+                        ReservationDateTime = r.DateTime,
                         Subtotal = r.Subtotal,
                         Discount = r.Discount,
                         Tax = r.Tax,
@@ -67,10 +75,15 @@ namespace Cinema_Backend.Controllers
                     .Where(r => r.UserId == userIdString)
                     .Include(r => r.ReservationSeats)
                         .ThenInclude(rs => rs.Seat)
+                    .Include(r => r.Screening)
+                        .ThenInclude(s => s.Film)
+                    .Include(r => r.Screening)
+                        .ThenInclude(s => s.Room)
                     .Select(r => new ReservationDto
                     {
                         ReservationId = r.ReservationId,
                         ScreeningId = r.ScreeningId,
+                        UserId = r.UserId,
                         DateTime = r.DateTime,
                         Subtotal = r.Subtotal,
                         Discount = r.Discount,
@@ -97,8 +110,6 @@ namespace Cinema_Backend.Controllers
         public async Task<ActionResult<ReservationDto>> GetById(int id)
         {
             var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!int.TryParse(userIdString, out var userId))
-                return Forbid();
 
             var reservation = await _context.Reservations
                 .Include(r => r.ReservationSeats)
